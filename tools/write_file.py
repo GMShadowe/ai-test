@@ -1,11 +1,13 @@
-from tools.sandbox import resolve_path
+import asyncio
+import json
 
+from tools.sandbox import resolve_path
 
 TOOL = {
     "type": "function",
     "function": {
         "name": "write_file",
-        "description": "Write UTF-8 text to a file inside the experiment workspace.",
+        "description": "Write UTF-8 text to a file inside /workspace.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -20,13 +22,26 @@ TOOL = {
 
 
 async def execute(path: str, content: str) -> dict:
-    if len(content.encode("utf-8")) > 100_000:
-        return {"ok": False, "error": "Content exceeds 100 KB limit"}
-
     try:
-        file_path = resolve_path(path)
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(content, encoding="utf-8")
-        return {"ok": True, "path": str(file_path)}
-    except (OSError, ValueError) as exc:
+        target = resolve_path(path)
+        payload = json.dumps({
+            "op": "write",
+            "path": str(target.relative_to("/workspace")),
+            "content": content,
+        })
+
+        process = await asyncio.create_subprocess_exec(
+            "sudo", "-n", "-u", "subject",
+            "/usr/local/bin/subject-file",
+            cwd="/home/ai",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await process.communicate(payload.encode())
+
+        if process.returncode != 0:
+            return {"ok": False, "error": stderr.decode(errors="replace")[-2000:]}
+        return json.loads(stdout.decode())
+    except Exception as exc:
         return {"ok": False, "error": str(exc)}

@@ -1,0 +1,56 @@
+import asyncio
+import os
+
+TOOL = {
+    "type": "function",
+    "function": {
+        "name": "shell_exec",
+        "description": (
+            "Run a command as the unprivileged subject account inside /workspace. "
+            "Commands have a 15-second timeout. State the purpose before execution."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"command": {"type": "string"}},
+            "required": ["command"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+
+async def execute(command: str) -> dict:
+    if not command.strip():
+        return {"ok": False, "error": "Empty command"}
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "sudo", "-n", "/usr/local/bin/subject-shell", command,
+            cwd="/workspace",
+            env={
+                "PATH": "/usr/local/bin:/usr/bin:/bin",
+                "HOME": "/home/subject",
+                "LANG": "C.UTF-8",
+            },
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
+        )
+
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(), timeout=15
+            )
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+            return {"ok": False, "error": "Command timed out after 15 seconds"}
+
+        return {
+            "ok": process.returncode == 0,
+            "exit_code": process.returncode,
+            "stdout": stdout.decode(errors="replace")[-12000:],
+            "stderr": stderr.decode(errors="replace")[-4000:],
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}

@@ -1,24 +1,17 @@
 import asyncio
 import os
-from pathlib import Path
-
-from tools.sandbox import WORKSPACE
-
 
 TOOL = {
     "type": "function",
     "function": {
         "name": "shell_exec",
         "description": (
-            "Run a shell command as the ordinary Ubuntu guest user. "
-            "The command runs in the experiment workspace with a timeout. "
-            "Report the purpose of the command before using this tool."
+            "Run a command as the unprivileged subject account inside /workspace. "
+            "Commands have a 15-second timeout. State the purpose before execution."
         ),
         "parameters": {
             "type": "object",
-            "properties": {
-                "command": {"type": "string"}
-            },
+            "properties": {"command": {"type": "string"}},
             "required": ["command"],
             "additionalProperties": False,
         },
@@ -30,22 +23,15 @@ async def execute(command: str) -> dict:
     if not command.strip():
         return {"ok": False, "error": "Empty command"}
 
-    env = {
-        "PATH": "/usr/local/bin:/usr/bin:/bin",
-        "HOME": str(Path.home()),
-        "LANG": "C.UTF-8",
-        "WORKSPACE": str(WORKSPACE),
-    }
-
     try:
         process = await asyncio.create_subprocess_exec(
-            "/bin/bash",
-            "--noprofile",
-            "--norc",
-            "-c",
-            command,
-            cwd=str(WORKSPACE),
-            env=env,
+            "sudo", "-n", "/usr/local/bin/subject-shell", "cd /workspace && " + command,
+            cwd="/home/ai",
+            env={
+                "PATH": "/usr/local/bin:/usr/bin:/bin",
+                "HOME": "/home/subject",
+                "LANG": "C.UTF-8",
+            },
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             start_new_session=True,

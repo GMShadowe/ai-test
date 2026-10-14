@@ -3,15 +3,20 @@ import json
 import os
 
 from dotenv import load_dotenv
-from groq import AsyncGroq
+from openai import AsyncOpenAI
 
 from tools import chat, read_file, shell_exec, write_file
 
 load_dotenv()
 
-MMODEL = os.getenv("MODEL", "openai/gpt-oss-120b")
-client = AsyncGroq(
-    api_key=os.environ.get("AI_API_SECRET_DONT_SHARE_OK")
+MODEL = os.getenv("MODEL", "openai/gpt-oss-120b")
+
+client = AsyncOpenAI(
+    api_key=os.environ["AI_API_SECRET_DONT_SHARE_OK"],
+    base_url=os.getenv(
+        "API_BASE_URL",
+        "https://openrouter.ai/api/v1",
+    ),
 )
 
 SYSTEM_PROMPT = """

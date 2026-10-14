@@ -21,7 +21,16 @@ status = "idle"
 
 
 async def publish_event(event: dict):
+    global status
+
     event.setdefault("time", time.time())
+
+    # Keep the API status synchronized with agent lifecycle events.
+    if event.get("type") == "status":
+        new_status = event.get("status")
+        if new_status in {"idle", "running", "completed", "stopped", "error"}:
+            status = new_status
+
     disconnected = []
 
     for client in list(clients):
@@ -78,7 +87,7 @@ async def get_status():
     return {
         "status": status,
         "uptime": int(time.time() - started_at) if started_at else 0,
-        "model": os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
+        "model": os.getenv("MODEL", "openai/gpt-oss-120b"),
     }
 
 
