@@ -1,37 +1,11 @@
-import base64
-import shlex
-
-from tools.sandbox import run_remote, validate_path
-
-
-def write_file(path: str, content: str) -> dict:
-    try:
-        safe_path = validate_path(path)
-    except ValueError as exc:
-        return {"ok": False, "error": str(exc)}
-
-    encoded = base64.b64encode(content.encode()).decode()
-
-    command = (
-        "mkdir -p -- "
-        + shlex.quote(str(__import__("posixpath").dirname(safe_path)))
-        + " && printf %s "
-        + shlex.quote(encoded)
-        + " | base64 -d > "
-        + shlex.quote(safe_path)
-    )
-
-    return run_remote(command, timeout=10)
+from tools.sandbox import resolve_path
 
 
 TOOL = {
     "type": "function",
     "function": {
         "name": "write_file",
-        "description": (
-            "Write text to a file inside the permitted VM workspace. "
-            "Creates parent directories if necessary."
-        ),
+        "description": "Write UTF-8 text to a file inside the experiment workspace.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -43,3 +17,16 @@ TOOL = {
         },
     },
 }
+
+
+async def execute(path: str, content: str) -> dict:
+    if len(content.encode("utf-8")) > 100_000:
+        return {"ok": False, "error": "Content exceeds 100 KB limit"}
+
+    try:
+        file_path = resolve_path(path)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(content, encoding="utf-8")
+        return {"ok": True, "path": str(file_path)}
+    except (OSError, ValueError) as exc:
+        return {"ok": False, "error": str(exc)}

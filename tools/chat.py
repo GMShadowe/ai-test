@@ -1,21 +1,34 @@
 import asyncio
+import uuid
 
-_pending_replies: dict[str, asyncio.Future] = {}
-_reply_counter = 0
-_reply_lock = asyncio.Lock()
+_pending: dict[str, asyncio.Future] = {}
 
 
-async def send_message(text: str, publish_event) -> dict:
-    global _reply_counter
+TOOL = {
+    "type": "function",
+    "function": {
+        "name": "send_message",
+        "description": (
+            "Send a message to the human operator and wait for their reply. "
+            "Use this when you need clarification or want to communicate."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"text": {"type": "string"}},
+            "required": ["text"],
+            "additionalProperties": False,
+        },
+    },
+}
 
+
+async def execute(text: str, publish_event) -> dict:
     if not text.strip():
         return {"ok": False, "error": "Message is empty"}
 
-    async with _reply_lock:
-        _reply_counter += 1
-        message_id = str(_reply_counter)
-        future = asyncio.get_running_loop().create_future()
-        _pending_replies[message_id] = future
+    message_id = uuid.uuid4().hex
+    future = asyncio.get_running_loop().create_future()
+    _pending[message_id] = future
 
     await publish_event({
         "type": "message",
@@ -30,12 +43,11 @@ async def send_message(text: str, publish_event) -> dict:
     except asyncio.TimeoutError:
         return {"ok": False, "error": "Operator reply timed out"}
     finally:
-        _pending_replies.pop(message_id, None)
+        _pending.pop(message_id, None)
 
 
 async def submit_reply(message_id: str, text: str) -> bool:
-    future = _pending_replies.get(message_id)
-
+    future = _pending.get(message_id)
     if future is None or future.done():
         return False
 
