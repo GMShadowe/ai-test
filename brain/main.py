@@ -86,8 +86,11 @@ async def get_status():
 async def start_experiment(request: StartRequest):
     global agent_task, started_at, status
 
-    if not os.getenv("GROQ_API_KEY"):
-        raise HTTPException(500, "GROQ_API_KEY is not configured")
+    if not os.getenv("AI_API_SECRET_DONT_SHARE_OK"):
+        raise HTTPException(
+            500,
+            "AI_API_SECRET_DONT_SHARE_OK is not configured",
+        )
 
     if agent_task and not agent_task.done():
         raise HTTPException(409, "Experiment is already running")
@@ -164,7 +167,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.send_json({
             "type": "status",
             "status": status,
-            "model": os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
+            "model": os.getenv("MODEL", "openai/gpt-oss-120b"),
         })
 
         while True:
